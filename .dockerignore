@@ -6,6 +6,7 @@ datasets/
 runs/
 .git/
 .gitignore
+.gitattributes
 *.md
 !README.md
 docker-compose.yml
@@ -14,3 +15,7 @@ README_original.md
 .env
 venv/
 .venv/
+*.jpg
+*.png
+.github/
+
