@@ -10,15 +10,19 @@ RUN useradd -m -u 1000 appuser
 
 WORKDIR /app
 
-# Install Python dependencies
+# Install CPU-only PyTorch FIRST (saves ~1.5 GB vs full CUDA version)
+RUN pip install --no-cache-dir torch torchvision --index-url https://download.pytorch.org/whl/cpu
+
+# Install remaining Python dependencies
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
 # Copy application
 COPY . .
 
-# Create necessary directories with proper permissions
-RUN mkdir -p uploads datasets && chown -R appuser:appuser /app
+# Create necessary directories and set permissions
+RUN mkdir -p uploads datasets \
+    && chmod -R 777 uploads datasets
 
 # Switch to non-root user
 USER appuser

@@ -3,8 +3,10 @@
 
 # Core ML / Vision
 ultralytics>=8.2.0
-torch>=2.0.0
-torchvision>=0.15.0
+# torch and torchvision are pre-installed as CPU-only in Dockerfile
+# For local install: pip install torch torchvision
+# torch>=2.0.0
+# torchvision>=0.15.0
 opencv-python>=4.8.0
 numpy>=1.24.0
 
