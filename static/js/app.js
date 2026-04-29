@@ -14,6 +14,11 @@ const state = {
     alertCount: 0,
     complianceHistory: [],
     maxHistoryPoints: 60,
+    // Browser webcam state
+    browserCamActive: false,
+    browserCamStream: null,
+    browserCamLoop: null,
+    browserCamProcessing: false,
 };
 
 // ─── SocketIO Connection ────────────────────────────────
@@ -63,23 +68,33 @@ const placeholder = document.getElementById('video-placeholder');
 // ─── Mode Switching ────────────────────────────────────
 
 function switchMode(mode) {
-    // Stop live stream if switching to manual
-    if (mode === 'manual' && state.isMonitoring) {
+    // Stop any active streams
+    if (mode !== 'live' && state.isMonitoring) {
         stopMonitoring();
+    }
+    if (mode !== 'browser-cam' && state.browserCamActive) {
+        stopBrowserCam();
     }
 
     // Toggle UI buttons
     document.getElementById('btn-mode-live').classList.toggle('active', mode === 'live');
+    document.getElementById('btn-mode-browser-cam').classList.toggle('active', mode === 'browser-cam');
     document.getElementById('btn-mode-manual').classList.toggle('active', mode === 'manual');
 
     // Toggle Controls
     document.getElementById('live-controls').classList.toggle('hidden', mode !== 'live');
+    document.getElementById('browser-cam-controls').classList.toggle('hidden', mode !== 'browser-cam');
     document.getElementById('manual-controls').classList.toggle('hidden', mode !== 'manual');
 
-    // Toggle Video Area
+    // Hide all video elements first
+    videoFeed.classList.add('hidden');
+    manualImageResult.classList.add('hidden');
+    document.getElementById('browser-cam-preview').classList.add('hidden');
+    document.getElementById('browser-cam-result').classList.add('hidden');
+    document.getElementById('recording-badge').classList.add('hidden');
+
+    // Show correct video area
     if (mode === 'manual') {
-        videoFeed.classList.add('hidden');
-        document.getElementById('recording-badge').classList.add('hidden');
         if (!manualImageResult.src || manualImageResult.src.endsWith(window.location.host + '/')) {
             placeholder.classList.remove('hidden');
             document.getElementById('placeholder-text').innerHTML = "Select an image to detect PPE";
@@ -87,15 +102,21 @@ function switchMode(mode) {
             placeholder.classList.add('hidden');
             manualImageResult.classList.remove('hidden');
         }
+    } else if (mode === 'browser-cam') {
+        placeholder.classList.remove('hidden');
+        document.getElementById('placeholder-text').innerHTML = `
+            <div style="display:flex;flex-direction:column;align-items:center;gap:8px;">
+                <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M23 7l-7 5 7 5V7z"></path><rect x="1" y="5" width="15" height="14" rx="2" ry="2"></rect></svg>
+                <span>Click <strong>Start Camera</strong> to use your browser webcam</span>
+                <span style="font-size:0.8rem;opacity:0.6;">Works on cloud deployments — camera runs in your browser</span>
+            </div>`;
     } else {
-        manualImageResult.classList.add('hidden');
         if (state.isMonitoring) {
             placeholder.classList.add('hidden');
             videoFeed.classList.remove('hidden');
         } else {
             placeholder.classList.remove('hidden');
             document.getElementById('placeholder-text').innerHTML = "Select a video source and click <strong>Start Monitoring</strong>";
-            videoFeed.classList.add('hidden');
         }
     }
 }
@@ -529,6 +550,165 @@ async function downloadReport() {
         console.error('Report download failed:', err);
         alert('Failed to generate report');
     }
+}
+
+// ─── Browser Webcam Mode ───────────────────────────────────────
+
+async function startBrowserCam() {
+    const preview = document.getElementById('browser-cam-preview');
+    const resultImg = document.getElementById('browser-cam-result');
+    const canvas = document.getElementById('browser-cam-canvas');
+    const fpsLabel = document.getElementById('browser-cam-fps');
+
+    try {
+        // Request camera access
+        const stream = await navigator.mediaDevices.getUserMedia({
+            video: { width: { ideal: 640 }, height: { ideal: 480 }, facingMode: 'environment' },
+            audio: false
+        });
+
+        state.browserCamStream = stream;
+        state.browserCamActive = true;
+
+        // Show preview briefly then switch to result display
+        preview.srcObject = stream;
+        preview.classList.remove('hidden');
+        placeholder.classList.add('hidden');
+
+        // Toggle buttons
+        document.getElementById('btn-cam-start').classList.add('hidden');
+        document.getElementById('btn-cam-stop').classList.remove('hidden');
+        updateStatus('active', 'Browser Cam');
+        document.getElementById('recording-badge').classList.remove('hidden');
+
+        // Wait for video to be ready
+        await new Promise(resolve => {
+            preview.onloadedmetadata = resolve;
+        });
+
+        // Set canvas size to match video
+        canvas.width = preview.videoWidth;
+        canvas.height = preview.videoHeight;
+        const ctx = canvas.getContext('2d');
+
+        // Start frame capture loop
+        let frameCount = 0;
+        let lastFpsTime = Date.now();
+
+        async function captureAndDetect() {
+            if (!state.browserCamActive) return;
+            if (state.browserCamProcessing) {
+                // Skip frame if previous one is still processing
+                state.browserCamLoop = requestAnimationFrame(captureAndDetect);
+                return;
+            }
+
+            state.browserCamProcessing = true;
+
+            try {
+                // Draw current video frame to canvas
+                ctx.drawImage(preview, 0, 0);
+
+                // Convert to blob
+                const blob = await new Promise(resolve => {
+                    canvas.toBlob(resolve, 'image/jpeg', 0.7);
+                });
+
+                // Send to server for detection
+                const formData = new FormData();
+                formData.append('file', blob, 'frame.jpg');
+
+                const res = await fetch('/api/detect_image', { method: 'POST', body: formData });
+                const data = await res.json();
+
+                if (data.status === 'success' && state.browserCamActive) {
+                    // Show annotated result (hide preview, show result)
+                    resultImg.src = data.image_b64;
+                    resultImg.classList.remove('hidden');
+                    preview.classList.add('hidden');
+
+                    // Update stats
+                    updateStatsUI(data.stats);
+
+                    // Handle violations
+                    if (data.violations && data.violations.length > 0) {
+                        data.violations.forEach(v => addViolationAlert(v));
+                    }
+
+                    // FPS counter
+                    frameCount++;
+                    const now = Date.now();
+                    if (now - lastFpsTime >= 1000) {
+                        const fps = frameCount / ((now - lastFpsTime) / 1000);
+                        fpsLabel.textContent = `${fps.toFixed(1)} FPS`;
+                        document.querySelector('#fps-badge .fps-value').textContent = fps.toFixed(1);
+                        frameCount = 0;
+                        lastFpsTime = now;
+                    }
+                }
+            } catch (err) {
+                console.error('Browser cam frame error:', err);
+            } finally {
+                state.browserCamProcessing = false;
+            }
+
+            // Schedule next frame capture
+            if (state.browserCamActive) {
+                // Small delay to avoid overwhelming the server
+                setTimeout(() => {
+                    state.browserCamLoop = requestAnimationFrame(captureAndDetect);
+                }, 100); // ~10 FPS max request rate
+            }
+        }
+
+        // Start the loop
+        state.browserCamLoop = requestAnimationFrame(captureAndDetect);
+
+    } catch (err) {
+        console.error('Camera access failed:', err);
+        if (err.name === 'NotAllowedError') {
+            alert('Camera access denied. Please allow camera permission and try again.');
+        } else if (err.name === 'NotFoundError') {
+            alert('No camera found on this device.');
+        } else {
+            alert('Failed to access camera: ' + err.message);
+        }
+    }
+}
+
+function stopBrowserCam() {
+    state.browserCamActive = false;
+
+    // Cancel animation frame
+    if (state.browserCamLoop) {
+        cancelAnimationFrame(state.browserCamLoop);
+        state.browserCamLoop = null;
+    }
+
+    // Stop camera stream
+    if (state.browserCamStream) {
+        state.browserCamStream.getTracks().forEach(track => track.stop());
+        state.browserCamStream = null;
+    }
+
+    // Reset UI
+    const preview = document.getElementById('browser-cam-preview');
+    const resultImg = document.getElementById('browser-cam-result');
+    preview.srcObject = null;
+    preview.classList.add('hidden');
+    resultImg.classList.add('hidden');
+    document.getElementById('btn-cam-start').classList.remove('hidden');
+    document.getElementById('btn-cam-stop').classList.add('hidden');
+    document.getElementById('recording-badge').classList.add('hidden');
+    document.getElementById('browser-cam-fps').textContent = '';
+    placeholder.classList.remove('hidden');
+    document.getElementById('placeholder-text').innerHTML = `
+        <div style="display:flex;flex-direction:column;align-items:center;gap:8px;">
+            <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M23 7l-7 5 7 5V7z"></path><rect x="1" y="5" width="15" height="14" rx="2" ry="2"></rect></svg>
+            <span>Click <strong>Start Camera</strong> to use your browser webcam</span>
+            <span style="font-size:0.8rem;opacity:0.6;">Works on cloud deployments — camera runs in your browser</span>
+        </div>`;
+    updateStatus('idle', 'Idle');
 }
 
 // ─── Initialize ─────────────────────────────────────────

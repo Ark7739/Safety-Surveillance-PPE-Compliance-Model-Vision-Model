@@ -59,6 +59,7 @@
         <div class="mode-toggle-container" style="grid-column: 1 / -1; display: flex; justify-content: center; margin-bottom: -10px;">
             <div class="mode-toggle">
                 <button id="btn-mode-live" class="mode-btn active" onclick="switchMode('live')">📹 Live Stream</button>
+                <button id="btn-mode-browser-cam" class="mode-btn" onclick="switchMode('browser-cam')">🌐 Browser Webcam</button>
                 <button id="btn-mode-manual" class="mode-btn" onclick="switchMode('manual')">🖼️ Manual Image</button>
             </div>
         </div>
@@ -76,6 +77,9 @@
                 </div>
                 <img id="video-feed" class="video-feed hidden" src="" alt="Live PPE Detection Feed">
                 <img id="manual-image-result" class="video-feed hidden" src="" alt="Manual Detection Result">
+                <video id="browser-cam-preview" class="video-feed hidden" autoplay playsinline muted></video>
+                <canvas id="browser-cam-canvas" class="hidden"></canvas>
+                <img id="browser-cam-result" class="video-feed hidden" src="" alt="Browser Webcam Detection Result">
                 <div class="video-overlay" id="video-overlay">
                     <div class="overlay-badge recording hidden" id="recording-badge">
                         <span class="rec-dot"></span> LIVE
@@ -113,6 +117,19 @@
                             Stop
                         </button>
                     </div>
+                </div>
+
+                <!-- Browser Webcam Controls -->
+                <div id="browser-cam-controls" class="hidden" style="display: flex; gap: 16px; width: 100%; align-items: center; justify-content: center; flex-wrap: wrap;">
+                    <button id="btn-cam-start" class="btn btn-primary" style="padding: 12px 24px; font-size: 1rem;" onclick="startBrowserCam()">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="margin-right: 8px;"><path d="M23 7l-7 5 7 5V7z"></path><rect x="1" y="5" width="15" height="14" rx="2" ry="2"></rect></svg>
+                        Start Camera
+                    </button>
+                    <button id="btn-cam-stop" class="btn btn-danger hidden" style="padding: 12px 24px; font-size: 1rem;" onclick="stopBrowserCam()">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" style="margin-right: 8px;"><rect x="4" y="4" width="16" height="16" rx="2"/></svg>
+                        Stop Camera
+                    </button>
+                    <span id="browser-cam-fps" style="color: var(--text-muted); font-size: 0.85rem;"></span>
                 </div>
 
                 <!-- Manual Controls -->
