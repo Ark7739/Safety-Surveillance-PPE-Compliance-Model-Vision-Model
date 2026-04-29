@@ -1,0 +1,32 @@
+name: Deploy to Hugging Face Spaces
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:  # Allow manual trigger
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          lfs: true          # Pull Git LFS files (yolov8s.pt)
+          fetch-depth: 0     # Full history for HF push
+
+      - name: Prepare HF README
+        run: |
+          # Backup original README and use HF-specific one
+          cp README.md README_original.md
+          cp HF_README.md README.md
+
+      - name: Push to Hugging Face Spaces
+        env:
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+        run: |
+          git config user.name "GitHub Actions"
+          git config user.email "actions@github.com"
+          git add README.md README_original.md
+          git commit -m "Prepare HF README for deployment" --allow-empty
+          git push https://HF_USER:$HF_TOKEN@huggingface.co/spaces/${{ secrets.HF_SPACE }} main --force

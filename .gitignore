@@ -1,0 +1,42 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+*.egg-info/
+dist/
+build/
+*.egg
+
+# Virtual environment
+venv/
+env/
+.venv/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Model files (large — use Git LFS or download at runtime)
+# Uncomment the line below if your model is too large for Git
+# *.pt
+
+# Database (auto-generated)
+*.db
+
+# Uploads (user data)
+uploads/*
+!uploads/.gitkeep
+
+# Training outputs
+runs/
+datasets/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Environment variables
+.env

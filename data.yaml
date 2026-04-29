@@ -1,0 +1,25 @@
+# YOLOv8 PPE Detection Dataset Configuration
+# -------------------------------------------
+# This file configures the dataset paths and class definitions
+# for training the PPE compliance detection model.
+
+# Dataset root directory
+path: ./datasets/ppe-detection
+
+# Train/val/test splits
+train: train/images
+val: valid/images
+test: test/images
+
+# Number of classes
+nc: 7
+
+# Class names
+names:
+  0: helmet
+  1: vest  
+  2: gloves
+  3: goggles
+  4: boots
+  5: harness
+  6: person

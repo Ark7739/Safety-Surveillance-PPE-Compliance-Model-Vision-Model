@@ -1,0 +1,270 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="AI-powered PPE compliance monitoring system for construction and industrial site safety surveillance">
+    <title>SafetyVision AI — PPE Compliance Monitor</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/static/css/style.css">
+    <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"></script>
+</head>
+<body>
+    <!-- ─── Header ──────────────────────────────────── -->
+    <header class="app-header" id="app-header">
+        <div class="header-left">
+            <div class="logo">
+                <div class="logo-icon">
+                    <svg width="28" height="28" viewBox="0 0 28 28" fill="none">
+                        <circle cx="14" cy="14" r="12" stroke="url(#grad1)" stroke-width="2.5"/>
+                        <path d="M9 14.5L12.5 18L19 10" stroke="url(#grad1)" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+                        <defs>
+                            <linearGradient id="grad1" x1="0" y1="0" x2="28" y2="28">
+                                <stop offset="0%" stop-color="#00d4ff"/>
+                                <stop offset="100%" stop-color="#7c3aed"/>
+                            </linearGradient>
+                        </defs>
+                    </svg>
+                </div>
+                <div class="logo-text">
+                    <h1>SafetyVision AI</h1>
+                    <span class="logo-subtitle">PPE Compliance Monitor</span>
+                </div>
+            </div>
+        </div>
+        <div class="header-center">
+            <div class="status-indicator" id="status-indicator">
+                <span class="status-dot idle"></span>
+                <span class="status-text">Idle</span>
+            </div>
+        </div>
+        <div class="header-right">
+            <div class="fps-badge" id="fps-badge">
+                <span class="fps-value">0</span>
+                <span class="fps-label">FPS</span>
+            </div>
+            <div class="frame-badge" id="frame-badge">
+                <span class="frame-value">0</span>
+                <span class="frame-label">Frames</span>
+            </div>
+        </div>
+    </header>
+
+    <!-- ─── Main Content ────────────────────────────── -->
+    <main class="app-main">
+        <!-- Mode Toggle -->
+        <div class="mode-toggle-container" style="grid-column: 1 / -1; display: flex; justify-content: center; margin-bottom: -10px;">
+            <div class="mode-toggle">
+                <button id="btn-mode-live" class="mode-btn active" onclick="switchMode('live')">📹 Live Stream</button>
+                <button id="btn-mode-manual" class="mode-btn" onclick="switchMode('manual')">🖼️ Manual Image</button>
+            </div>
+        </div>
+
+        <!-- Left: Video + Controls -->
+        <section class="video-section" id="video-section">
+            <div class="video-container" id="video-container">
+                <div class="video-placeholder" id="video-placeholder">
+                    <div class="placeholder-icon">
+                        <svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                            <path d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z"/>
+                        </svg>
+                    </div>
+                    <p id="placeholder-text">Select a video source and click <strong>Start Monitoring</strong></p>
+                </div>
+                <img id="video-feed" class="video-feed hidden" src="" alt="Live PPE Detection Feed">
+                <img id="manual-image-result" class="video-feed hidden" src="" alt="Manual Detection Result">
+                <div class="video-overlay" id="video-overlay">
+                    <div class="overlay-badge recording hidden" id="recording-badge">
+                        <span class="rec-dot"></span> LIVE
+                    </div>
+                </div>
+            </div>
+
+            <!-- Controls Bar -->
+            <div class="controls-bar" id="controls-bar">
+                <!-- Live Controls -->
+                <div id="live-controls" style="display: flex; gap: 16px; width: 100%; align-items: flex-end; flex-wrap: wrap;">
+                    <div class="source-selector">
+                        <label for="source-select">Source</label>
+                        <select id="source-select" class="control-select">
+                            <option value="0">🎥 Webcam</option>
+                            <option value="upload_video">📁 Upload Video</option>
+                            <option value="rtsp">📡 RTSP Stream</option>
+                        </select>
+                    </div>
+                    <input type="file" id="file-upload-video" accept="video/*" class="hidden">
+                    <input type="text" id="rtsp-input" class="control-input hidden" placeholder="rtsp://camera-url">
+                    
+                    <div class="control-group">
+                        <label for="confidence-slider">Confidence: <span id="confidence-value">0.50</span></label>
+                        <input type="range" id="confidence-slider" min="0.1" max="0.95" step="0.05" value="0.50" class="control-slider">
+                    </div>
+
+                    <div class="control-buttons">
+                        <button id="btn-start" class="btn btn-primary" onclick="startMonitoring()">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><polygon points="5,3 19,12 5,21"/></svg>
+                            Start Stream
+                        </button>
+                        <button id="btn-stop" class="btn btn-danger hidden" onclick="stopMonitoring()">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><rect x="4" y="4" width="16" height="16" rx="2"/></svg>
+                            Stop
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Manual Controls -->
+                <div id="manual-controls" class="hidden" style="display: flex; gap: 16px; width: 100%; align-items: center; justify-content: center;">
+                    <input type="file" id="file-upload-manual" accept="image/*" class="hidden">
+                    <button class="btn btn-primary" style="padding: 12px 24px; font-size: 1rem;" onclick="document.getElementById('file-upload-manual').click()">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="margin-right: 8px;"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><circle cx="8.5" cy="8.5" r="1.5"></circle><polyline points="21 15 16 10 5 21"></polyline></svg>
+                        Upload Image to Detect
+                    </button>
+                </div>
+            </div>
+        </section>
+
+        <!-- Right: Stats & Alerts -->
+        <aside class="sidebar" id="sidebar">
+            <!-- Compliance Gauge -->
+            <div class="card gauge-card" id="gauge-card">
+                <h2 class="card-title">Compliance Rate</h2>
+                <div class="gauge-container">
+                    <svg class="gauge-svg" viewBox="0 0 200 120">
+                        <path class="gauge-bg" d="M 20 100 A 80 80 0 0 1 180 100" fill="none" stroke-width="14" stroke-linecap="round"/>
+                        <path class="gauge-fill" id="gauge-fill" d="M 20 100 A 80 80 0 0 1 180 100" fill="none" stroke-width="14" stroke-linecap="round"/>
+                    </svg>
+                    <div class="gauge-value" id="gauge-value">--</div>
+                    <div class="gauge-label">%</div>
+                </div>
+                <div class="gauge-stats">
+                    <div class="gauge-stat compliant">
+                        <span class="gauge-stat-value" id="compliant-count">0</span>
+                        <span class="gauge-stat-label">Compliant</span>
+                    </div>
+                    <div class="gauge-stat total">
+                        <span class="gauge-stat-value" id="total-count">0</span>
+                        <span class="gauge-stat-label">Workers</span>
+                    </div>
+                    <div class="gauge-stat violations">
+                        <span class="gauge-stat-value" id="violation-count">0</span>
+                        <span class="gauge-stat-label">Violations</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- PPE Detection Counts -->
+            <div class="card detections-card" id="detections-card">
+                <h2 class="card-title">PPE Detections</h2>
+                <div class="detection-grid" id="detection-grid">
+                    <div class="detection-item" data-ppe="helmet">
+                        <div class="detection-icon">⛑️</div>
+                        <div class="detection-info">
+                            <span class="detection-name">Helmet</span>
+                            <span class="detection-count" id="det-helmet">0</span>
+                        </div>
+                        <label class="toggle-switch">
+                            <input type="checkbox" class="ppe-toggle" data-ppe="helmet" checked>
+                            <span class="toggle-slider"></span>
+                        </label>
+                    </div>
+                    <div class="detection-item" data-ppe="vest">
+                        <div class="detection-icon">🦺</div>
+                        <div class="detection-info">
+                            <span class="detection-name">Vest</span>
+                            <span class="detection-count" id="det-vest">0</span>
+                        </div>
+                        <label class="toggle-switch">
+                            <input type="checkbox" class="ppe-toggle" data-ppe="vest" checked>
+                            <span class="toggle-slider"></span>
+                        </label>
+                    </div>
+                    <div class="detection-item" data-ppe="gloves">
+                        <div class="detection-icon">🧤</div>
+                        <div class="detection-info">
+                            <span class="detection-name">Gloves</span>
+                            <span class="detection-count" id="det-gloves">0</span>
+                        </div>
+                        <label class="toggle-switch">
+                            <input type="checkbox" class="ppe-toggle" data-ppe="gloves">
+                            <span class="toggle-slider"></span>
+                        </label>
+                    </div>
+                    <div class="detection-item" data-ppe="goggles">
+                        <div class="detection-icon">🥽</div>
+                        <div class="detection-info">
+                            <span class="detection-name">Goggles</span>
+                            <span class="detection-count" id="det-goggles">0</span>
+                        </div>
+                        <label class="toggle-switch">
+                            <input type="checkbox" class="ppe-toggle" data-ppe="goggles">
+                            <span class="toggle-slider"></span>
+                        </label>
+                    </div>
+                    <div class="detection-item" data-ppe="boots">
+                        <div class="detection-icon">🥾</div>
+                        <div class="detection-info">
+                            <span class="detection-name">Boots</span>
+                            <span class="detection-count" id="det-boots">0</span>
+                        </div>
+                        <label class="toggle-switch">
+                            <input type="checkbox" class="ppe-toggle" data-ppe="boots">
+                            <span class="toggle-slider"></span>
+                        </label>
+                    </div>
+                    <div class="detection-item" data-ppe="harness">
+                        <div class="detection-icon">🪢</div>
+                        <div class="detection-info">
+                            <span class="detection-name">Harness</span>
+                            <span class="detection-count" id="det-harness">0</span>
+                        </div>
+                        <label class="toggle-switch">
+                            <input type="checkbox" class="ppe-toggle" data-ppe="harness">
+                            <span class="toggle-slider"></span>
+                        </label>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Violation Alerts Feed -->
+            <div class="card alerts-card" id="alerts-card">
+                <div class="card-header">
+                    <h2 class="card-title">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/>
+                            <line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/>
+                        </svg>
+                        Violation Alerts
+                    </h2>
+                    <span class="alert-count-badge" id="alert-count-badge">0</span>
+                </div>
+                <div class="alerts-list" id="alerts-list">
+                    <div class="alert-empty">No violations detected</div>
+                </div>
+            </div>
+        </aside>
+    </main>
+
+    <!-- ─── Bottom Panel: Chart + Report ────────────── -->
+    <section class="bottom-panel" id="bottom-panel">
+        <div class="card chart-card">
+            <div class="card-header">
+                <h2 class="card-title">Compliance Trend</h2>
+                <button class="btn btn-ghost btn-sm" onclick="downloadReport()">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M7 10l5 5 5-5M12 15V3"/>
+                    </svg>
+                    Download Report
+                </button>
+            </div>
+            <div class="chart-container">
+                <canvas id="compliance-chart"></canvas>
+            </div>
+        </div>
+    </section>
+
+    <script src="/static/js/app.js"></script>
+</body>
+</html>
