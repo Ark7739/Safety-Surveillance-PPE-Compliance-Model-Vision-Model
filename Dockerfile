@@ -5,9 +5,6 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libgl1-mesa-glx libglib2.0-0 libsm6 libxext6 libxrender-dev curl \
     && rm -rf /var/lib/apt/lists/*
 
-# Create non-root user (required by Hugging Face Spaces)
-RUN useradd -m -u 1000 appuser
-
 WORKDIR /app
 
 # Install CPU-only PyTorch FIRST (saves ~1.5 GB vs full CUDA version)
@@ -20,12 +17,8 @@ RUN pip install --no-cache-dir -r requirements.txt
 # Copy application
 COPY . .
 
-# Create necessary directories and set permissions
-RUN mkdir -p uploads datasets \
-    && chmod -R 777 uploads datasets
-
-# Switch to non-root user
-USER appuser
+# Create necessary directories and make everything writable
+RUN mkdir -p uploads datasets && chmod -R 777 /app
 
 # PORT is set by HF Spaces (7860), override for other platforms
 ENV PORT=7860
@@ -35,4 +28,4 @@ EXPOSE $PORT
 HEALTHCHECK --interval=30s --timeout=10s --retries=3 \
     CMD curl -f http://localhost:${PORT}/api/status || exit 1
 
-CMD python app.py --host 0.0.0.0 --port $PORT
+CMD ["python", "app.py", "--host", "0.0.0.0", "--port", "7860"]
